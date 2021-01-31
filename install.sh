@@ -1,5 +1,6 @@
 #!/bin/bash
 
+###### Scripts Variables
 $NEWUSER = "delta"
 $PASSWORD = "password"
 $PUBKEY = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDCICDoINxsKkkHq4og/M9g4fiV5F7rf9zJeZtw8Isf+vz1yGEPbJ2y6w5N6shS3D9hQR6+su2h6nhq4ejdRNsHYiZvcGvp9HdsGdOjFgMn6RuzoiUCIN6zkgBb8o2NgGy0wMVPzq9OVcappxt0NjbSRom+wSmsiSASY56n5JoaELdvm3gTsHpyVRilgRodvXaWYn680PF1jaO8qZypo/eQp7NoDPwB0aAB3MDEnmbNwCEBvi1QW+AHYaOWRY7Xop5oo3uxncWrj38TimeFYqSP0so6Bx3sdTYLBzhwMEs7nKKuvJgZ9337TbmPOO+forD26lAC2jm6sBVbWJwzUivhGJW1a71pgFhm8FjK62xJy/cEesASxRMEhM9WaIo7vdw2WZnf/IzTHfDLs3OpQjQhckVaBYO0UMP6ClIvOiEn/sC+jeI4LrObGbGKBa8HYEC9BCPHrQPaIwNW81aRHnK0nFqii0nKaVKGAi4oPtuPmbueIkeVNu/Gxm/6VTnwQZkw3h32HzqlcxYjr5ewPaoMg3A5BfIRR/Kx5G01V74u02QBWL+wo9WukeRHSdXWdPajVVtgKsWjL93R9jJZWChjEfD1p1dgKEreuiJQ8cCBCZcwNYJTo7HEjLXGDiNh8pKMrPduQqn1A0l/VInjDPiOjEFsjuWlg5SgTUtPKqLcNQ== delta@T7500-Workstation"
@@ -56,6 +57,7 @@ usermod -aG docker $NEWUSER
 docker network create --driver macvlan --attachable --subnet=192.168.1.120/24 --gateway=192.168.1.254 -o parent=eth0 --ip-range=192.168.1.150/30 macvtap
 docker network create --driver bridge --subnet=192.168.128.0/24 --gateway=192.168.128.254 TelegrambotNetwork
 docker network create --driver bridge --subnet=172.128.0.0/16 --gateway=172.128.255.254 websitenetwork
+docker run -d -p 9000:9000 --name=portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce
 
 ###### Installing Zram Swap
 echo "Installing Zram Swap"
@@ -74,5 +76,28 @@ PAGE_CLUSTER=0
 SWAPPINESS=80
 " > /etc/zram-swap-config.conf
 
+###### Installing update
+apt update
 apt upgrade -yf
 apt autoremove -yf
+
+###### mount at boot the USB drive on /data
+mkdir /data
+apt-get install ntfs-3g
+echo "/dev/sda1 /data ntfs defaults,auto,users,rw,nofail,umask=000 0 0" >> /etc/fstab
+mount -a
+
+##### Installing And configuring Nginx 
+apt update
+apt install nginx -yf
+cp /data/configs-file/Nginx/* /etc/nginx/sites-available/
+ln -s /etc/nginx/sites-available/* /etc/nginx/sites-enabled/
+nginx -t
+systemctl reload nginx
+
+##### Installing And configuring Samba
+apt update
+apt install samba -yf
+cp /data/configs-file/Samba/smb.conf /etc/samba/smb.conf
+systemctl restart nmbd 
+systemctl restart smbd
