@@ -8,96 +8,112 @@ $bashthemeurl = "https://gist.githubusercontent.com/rickdaalhuizen90/d1df7f60424
 
 ###### Checking If the user is Root
 if ! [ $(id -u) = 0 ]; then
-   echo "I am not root!"
-   exit 1
+    echo "I am not root!"
+    exit 1
 fi
 echo "I am installing your raspberry All depency and I will uninstall all unused packages"
 
 ###### Checking If their is an internet Connection
 echo "Checking Internet connection"
 if ping -q -c 1 -W 1 google.com >/dev/null; then
-  echo "The network is up"
+    echo "The network is up"
 else
-  echo "The network is down"
-  exit 1
+    echo "The network is down"
+    exit 1
 fi
 
-###### Changing The user and Adding The ssh pubkey
-echo "Changing User to $USER and the password"
-usermod -l $NEWUSER ubuntu
-usermod -m -d /home/$NEWUSER $NEWUSER
-echo -e "$PASSWORD\n$PASSWORD" | passwd $NEWUSER
-echo "Changing the bash theme"
-curl ${bashthemeurl} > /home/$NEWUSER/.bashrc
-
-echo "Adding SSH pubkey"
-mkdir /home/$NEWUSER/.ssh/
-echo $PUBKEY > /home/$NEWUSER/.ssh/authorized_keys
-
-###### Cleaning installation of ubuntu server raspberry
-echo "Updating package list in Repo"
-apt update
-
-echo "Removing unused packages"
-apt purge -yf lxd lvm2 unattended-upgrades cloud-init snapd docker docker-engine docker.io containerd runc
-rm -rfd /etc/cloud
-
-###### Installing Docker
-echo "Adding docker Repo and installing it"
-apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common -yf
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-apt-key fingerprint 0EBFCD88
-add-apt-repository \
-   "deb [arch=arm64] https://download.docker.com/linux/ubuntu \
-   $(lsb_release -cs) \
-   stable"
-apt-get update
-apt-get install docker-ce docker-ce-cli containerd.io docker-compose -yf 
-usermod -aG docker $NEWUSER
-docker network create --driver macvlan --attachable --subnet=192.168.1.120/24 --gateway=192.168.1.254 -o parent=eth0 --ip-range=192.168.1.150/30 macvtap
-docker network create --driver bridge --subnet=192.168.128.0/24 --gateway=192.168.128.254 TelegrambotNetwork
-docker network create --driver bridge --subnet=172.128.0.0/16 --gateway=172.128.255.254 websitenetwork
-docker run -d -p 9000:9000 --name=portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce
-
-###### Installing Zram Swap
-echo "Installing Zram Swap"
-apt-get install git -yf
-cd /tmp/
-git clone https://github.com/StuartIanNaylor/zram-swap-config \
-&& cd zram-swap-config
-chmod +x install.sh && ./install.sh
-cd .. && rm -rfd zram-swap-config
-echo "MEM_FACTOR=70
-DRIVE_FACTOR=350
-COMP_ALG=lz4
-SWAP_DEVICES=4
-SWAP_PRI=75
-PAGE_CLUSTER=0
-SWAPPINESS=80
-" > /etc/zram-swap-config.conf
-
-###### Installing update
-apt update
-apt upgrade -yf
-apt autoremove -yf
-
-###### mount at boot the USB drive on /data
-mkdir /data
-apt-get install ntfs-3g
-echo "/dev/sda1 /data ntfs defaults,auto,users,rw,nofail,umask=000 0 0" >> /etc/fstab
-mount -a
-
-##### Installing And configuring Nginx 
-apt update
-apt install nginx -yf
-cp /data/configs-file/Nginx/* /etc/nginx/sites-available/
-ln -s /etc/nginx/sites-available/* /etc/nginx/sites-enabled/
-nginx -t
-systemctl reload nginx
 
 ##### Installing And configuring Samba
-apt update
-apt install samba -yf
-cp /data/configs-file/Samba/smb.conf /etc/samba/smb.conf
-systemctl restart nmbd 
-systemctl restart smbd
+samba_config() {
+    apt update
+    apt install samba -yf
+    cp /data/configs-file/Samba/smb.conf /etc/samba/smb.conf
+    systemctl restart nmbd
+    systemctl restart smbd
+}
+##### Installing And configuring Nginx
+nginx_config(){
+    apt update
+    apt install nginx -yf
+    cp /data/configs-file/Nginx/* /etc/nginx/sites-available/
+    ln -s /etc/nginx/sites-available/* /etc/nginx/sites-enabled/
+    nginx -t
+    systemctl reload nginx
+}
+###### mount at boot the USB drive on /data
+data_disk_mount(){
+    mkdir /data
+    apt-get install ntfs-3g
+    echo "/dev/sda1 /data ntfs defaults,auto,users,rw,nofail,umask=000 0 0" >> /etc/fstab
+    mount -a
+}
+###### Installing update
+update_and_clean() {
+    apt update
+    apt upgrade -yf
+    apt autoremove -yf
+}
+###### Installing Zram Swap
+zram_install() {
+    echo "Installing Zram Swap"
+    apt-get install git -yf
+    cd /tmp/
+    git clone https://github.com/StuartIanNaylor/zram-swap-config \
+    && cd zram-swap-config
+    chmod +x install.sh && ./install.sh
+    cd .. && rm -rfd zram-swap-config
+    echo "MEM_FACTOR=70
+    DRIVE_FACTOR=350
+    COMP_ALG=lz4
+    SWAP_DEVICES=4
+    SWAP_PRI=75
+    PAGE_CLUSTER=0
+    SWAPPINESS=80" > /etc/zram-swap-config.conf
+}
+###### Installing Docker
+docker_install() {
+    echo "Adding docker Repo and installing it"
+    apt-get install apt-transport-https ca-certificates curl gnupg-agent software-properties-common -yf
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+    apt-key fingerprint 0EBFCD88
+    add-apt-repository "deb [arch=arm64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    apt-get update
+    apt-get install docker-ce docker-ce-cli containerd.io docker-compose -yf
+    usermod -aG docker $NEWUSER
+    docker network create --driver macvlan --attachable --subnet=192.168.1.120/24 --gateway=192.168.1.254 -o parent=eth0 --ip-range=192.168.1.150/30 macvtap
+    docker network create --driver bridge --subnet=192.168.128.0/24 --gateway=192.168.128.254 TelegrambotNetwork
+    docker network create --driver bridge --subnet=172.128.0.0/16 --gateway=172.128.255.254 websitenetwork
+    docker run -d -p 9000:9000 --name=portainer --restart=always -v /var/run/docker.sock:/var/run/docker.sock -v portainer_data:/data portainer/portainer-ce
+}
+###### Clening the installation
+clean_ubuntu_base() {
+    echo "Updating package list in Repo"
+    apt update
+    
+    echo "Removing unused packages"
+    apt purge -yf lxd lvm2 unattended-upgrades cloud-init snapd docker docker-engine docker.io containerd runc
+    rm -rfd /etc/cloud
+}
+###### Changing The user and Adding The ssh pubkey
+user_config(){
+    echo "Changing User to $USER and the password"
+    usermod -l $NEWUSER ubuntu
+    usermod -m -d /home/$NEWUSER $NEWUSER
+    echo -e "$PASSWORD\n$PASSWORD" | passwd $NEWUSER
+    echo "Changing the bash theme"
+    curl ${bashthemeurl} > /home/$NEWUSER/.bashrc
+    
+    echo "Adding SSH pubkey"
+    mkdir /home/$NEWUSER/.ssh/
+    echo $PUBKEY > /home/$NEWUSER/.ssh/authorized_keys
+    
+}
+
+user_config
+clean_ubuntu_base
+docker_install
+zram_install
+update_and_clean
+data_disk_mount
+nginx_config
+samba_config
