@@ -111,6 +111,7 @@ user_config(){
 
 user_config
 clean_ubuntu_base
+echo "spearhead" > /etc/hostname
 docker_install
 zram_install
 update_and_clean
